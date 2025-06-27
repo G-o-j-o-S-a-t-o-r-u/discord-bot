@@ -1,4 +1,4 @@
-# config.py (Corrected for Hosting)
+# config.py (Corrected for Railway and other hosts)
 import os
 
 # --- Discord Bot Configuration ---
@@ -15,12 +15,12 @@ YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET')
 
 # --- Server Configuration ---
-# This part is now universal for Replit, Railway, etc.
-FLASK_HOST = '0.0.0.0'
-FLASK_PORT = int(os.getenv('PORT', 8080)) # Use the PORT env var provided by the host, default to 8080 for local testing
-
 # Use the WEBHOOK_BASE_URL environment variable you will set in the hosting platform's secrets.
 WEBHOOK_BASE_URL = os.getenv('WEBHOOK_BASE_URL')
+
+# Use the PORT environment variable provided by the host.
+FLASK_PORT = int(os.getenv('PORT', 8080))
+FLASK_HOST = '0.0.0.0'
 
 # --- API Endpoints (These are correct) ---
 TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token'
