@@ -477,10 +477,12 @@ def home():
     """Health check endpoint."""
     return "Stream Notification Bot - Webhook Listener is running."
 
+# In main.py, replace the entire twitch_webhook function with this one:
+
 @app.route('/webhooks/twitch', methods=['POST'])
 def twitch_webhook():
     """Handle Twitch webhook notifications."""
-    # Verify signature
+    # Step 0: Verify the request is genuinely from Twitch
     message_id = request.headers.get('Twitch-Eventsub-Message-Id', '')
     message_timestamp = request.headers.get('Twitch-Eventsub-Message-Timestamp', '')
     message_signature = request.headers.get('Twitch-Eventsub-Message-Signature', '')
@@ -495,44 +497,71 @@ def twitch_webhook():
 
     message_type = request.headers.get('Twitch-Eventsub-Message-Type')
     
+    # Step 1: Handle the one-time verification challenge from Twitch
     if message_type == 'webhook_callback_verification':
         json_data = request.get_json()
         if json_data and 'challenge' in json_data:
             return json_data['challenge'], 200
         return 'OK', 200
 
+    # Step 2: Handle an actual "Go Live" notification
     elif message_type == 'notification':
         json_data = request.get_json()
         if not json_data or 'event' not in json_data:
             return 'OK', 200
+        
         event = json_data['event']
         user_id = event['broadcaster_user_id']
         
         subscription = db.get_subscription(user_id)
         if subscription and subscription['platform'] == 'twitch':
+            
+            # --- START OF THE FIX ---
+            # The "go live" ping doesn't have game info, so we fetch it now.
+            
+            # Step 2a: Make a second API call to get the stream details
+            stream_details_url = f"https://api.twitch.tv/helix/streams?user_id={user_id}"
+            headers = {
+                'Client-ID': TWITCH_CLIENT_ID,
+                'Authorization': f'Bearer {TWITCH_ACCESS_TOKEN}'
+            }
+            
+            game_name = "No Category"
+            stream_title = "Stream is Live!"
+            
+            try:
+                stream_response = requests.get(stream_details_url, headers=headers)
+                stream_response.raise_for_status()
+                stream_data = stream_response.json().get('data', [])
+                
+                if stream_data: # If the stream is found
+                    stream_info = stream_data[0]
+                    game_name = stream_info.get('game_name', 'No Category')
+                    stream_title = stream_info.get('title', 'No Title')
+            except Exception as e:
+                print(f"Could not fetch stream details for {user_id}: {e}")
+
+            # --- END OF THE FIX ---
+
             channel_id = subscription['channel_id']
             channel = bot.get_channel(channel_id)
             if channel and hasattr(channel, 'send'):
                 username = event['broadcaster_user_name']
-                game_name = event.get('game_name', 'Unknown Game')
                 
-                # Use custom message if available
-                custom_msg = subscription.get('custom_message')
-                if custom_msg:
-                    message_content = f"{custom_msg}\n\n"
-                else:
-                    message_content = ""
-                
+                custom_msg = subscription.get('custom_message', "")
+                stream_url = f"https://twitch.tv/{username}"
+
                 embed = discord.Embed(
                     title=f"{username} is now LIVE on Twitch!",
-                    description=f"Playing: **{game_name}**",
-                    url=f"https://twitch.tv/{username}",
+                    description=f"**{stream_title}**\nPlaying: **{game_name}**\n\n[Click here to watch!]({stream_url})", # Use the new variables
+                    url=stream_url,
                     color=discord.Color.purple()
                 )
-                embed.set_thumbnail(url=f"https://static-cdn.jtvnw.net/previews-ttv/live_user_{username.lower()}-440x248.jpg")
+                # Use a generic thumbnail from the user, not the stream, as it's more reliable
+                embed.set_thumbnail(url=f"https://static-cdn.jtvnw.net/jtv_user_pictures/{user_id}-profile_image-300x300.png")
                 embed.set_footer(text="Click the title to watch the stream!")
                 
-                bot.loop.create_task(channel.send(content=message_content, embed=embed))
+                bot.loop.create_task(channel.send(content=custom_msg, embed=embed))
         return 'OK', 200
 
     return 'OK', 200
