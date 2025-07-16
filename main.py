@@ -571,6 +571,8 @@ def twitch_webhook():
 
     return 'OK', 200
 
+# In main.py, replace the entire youtube_webhook function with this one:
+
 @app.route('/webhooks/youtube', methods=['GET', 'POST'])
 def youtube_webhook():
     """Handle YouTube webhook notifications."""
@@ -581,6 +583,7 @@ def youtube_webhook():
         return 'OK', 200
 
     elif request.method == 'POST':  # Handle notification
+        # First, we try to parse the data. If it fails, it's not a valid notification.
         try:
             xml_data = xmltodict.parse(request.data)
             entry = xml_data.get('feed', {}).get('entry', {})
@@ -588,21 +591,22 @@ def youtube_webhook():
             video_id = entry.get('yt:videoId')
             channel_id = entry.get('yt:channelId')
             
+            # If the payload doesn't contain a video ID or channel ID, ignore it.
             if not video_id or not channel_id:
-                # If there's no ID, it's not a video notification we care about.
                 return 'OK', 200
-
         except Exception as e:
-            # If parsing fails, it's not a valid notification.
-            print(f"Error parsing potential YouTube webhook: {e}")
+            # This will catch errors from malformed XML or missing data.
+            print(f"Error parsing potential YouTube webhook, ignoring: {e}")
             return 'OK', 200
 
-        # --- THIS IS THE CORRECTED INDENTATION LEVEL ---
-        # This code now runs AFTER the 'try' block has successfully found a video_id and channel_id.
+        # --- THIS IS THE CORRECTED INDENTATION ---
+        # If the code reaches here, we know we have a valid video_id and channel_id.
+        # Now we can proceed with the main logic at the correct indentation level.
+        
         subscription = db.get_subscription(channel_id)
         if subscription and subscription['platform'] == 'youtube':
-            channel = bot.get_channel(subscription['channel_id'])
-            if channel and hasattr(channel, 'send'):
+            discord_channel = bot.get_channel(subscription['channel_id'])
+            if discord_channel and hasattr(discord_channel, 'send'):
                 channel_name = subscription['name']
                 video_title = entry.get('title', 'New Video')
                 
@@ -618,7 +622,7 @@ def youtube_webhook():
                 embed.set_thumbnail(url=f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg")
                 embed.set_footer(text="Click the title to watch the stream!")
                 
-                bot.loop.create_task(channel.send(content=custom_msg, embed=embed))
+                bot.loop.create_task(discord_channel.send(content=custom_msg, embed=embed))
         
         return 'OK', 200
     
