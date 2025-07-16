@@ -581,26 +581,25 @@ def youtube_webhook():
         return 'OK', 200
 
     elif request.method == 'POST':  # Handle notification
-        # YouTube doesn't use the secret for notifications, only for subscription.
-        # It's good practice to at least check the user agent.
         if 'Google-PubSubHubbub' not in request.headers.get('User-Agent', ''):
             print("Received a YouTube webhook from an unknown source.")
             abort(403)
         
         try:
+            # You can uncomment the line below for deep debugging to see the raw data from Google
+            # print(f"DEBUG YOUTUBE DATA: {request.data}")
+            
             xml_data = xmltodict.parse(request.data)
             entry = xml_data.get('feed', {}).get('entry', {})
             
             video_id = entry.get('yt:videoId')
             channel_id = entry.get('yt:channelId')
             
+            # If the payload doesn't contain a video ID or channel ID, ignore it.
             if not video_id or not channel_id:
                 return 'OK', 200
             
-            # Check if the video is new (not an update)
-            if 'updated' in entry:
-                if entry.get('published') != entry.get('updated'):
-                    return 'OK', 200
+            # --- THE FAULTY 'IF' BLOCK HAS BEEN REMOVED FROM HERE ---
 
             subscription = db.get_subscription(channel_id)
             if subscription and subscription['platform'] == 'youtube':
@@ -609,23 +608,19 @@ def youtube_webhook():
                     channel_name = subscription['name']
                     video_title = entry.get('title', 'New Video')
                     
-                    # Use custom message if available
-                    custom_msg = subscription.get('custom_message')
-                    if custom_msg:
-                        message_content = f"{custom_msg}\n\n"
-                    else:
-                        message_content = ""
+                    custom_msg = subscription.get('custom_message', "")
+                    stream_url = f"https://www.youtube.com/watch?v={video_id}"
                     
                     embed = discord.Embed(
                         title=f"{channel_name} is now LIVE on YouTube!",
-                        description=video_title,
-                        url=f"https://www.youtube.com/watch?v={video_id}",
+                        description=f"{video_title}\n\n[Click here to watch!]({stream_url})",
+                        url=stream_url,
                         color=discord.Color.red()
                     )
                     embed.set_thumbnail(url=f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg")
                     embed.set_footer(text="Click the title to watch the stream!")
                     
-                    bot.loop.create_task(channel.send(content=message_content, embed=embed))
+                    bot.loop.create_task(channel.send(content=custom_msg, embed=embed))
             return 'OK', 200
         except Exception as e:
             print(f"Error processing YouTube webhook: {e}")
