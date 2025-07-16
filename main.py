@@ -626,7 +626,7 @@ def youtube_webhook():
             
             # --- THE FAULTY 'IF' BLOCK HAS BEEN REMOVED FROM HERE ---
 
-            subscription = db.get_subscription(channel_id)
+        subscription = db.get_subscription(channel_id)
             if subscription and subscription['platform'] == 'youtube':
                 channel = bot.get_channel(subscription['channel_id'])
                 if channel and hasattr(channel, 'send'):
