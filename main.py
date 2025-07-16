@@ -265,6 +265,8 @@ async def add_command(interaction: discord.Interaction, platform: str, identifie
         else:
             await interaction.followup.send("❌ Failed to create YouTube webhook.")
 
+# PASTE THIS ENTIRE FUNCTION INTO YOUR main.py FILE
+
 @tree.command(name="remove", description="Unsubscribe from a Twitch streamer or YouTube channel")
 @discord.app_commands.describe(
     platform="Choose the platform (twitch or youtube)",
@@ -281,34 +283,37 @@ async def remove_command(interaction: discord.Interaction, platform: str, identi
     # Find the subscription
     guild_subscriptions = db.get_subscriptions_by_guild(interaction.guild_id)
     target_id = None
-    
+    streamer_name = identifier # Default name to the identifier
+
     if platform == 'twitch':
-        # For Twitch, we need to find by username
-        user_id = get_twitch_user_id(identifier)
-        if user_id and user_id in guild_subscriptions:
-            target_id = user_id
+        # For Twitch, find the subscription by the stored username (which is the identifier)
+        for sub_id, sub_data in guild_subscriptions.items():
+            if sub_data['platform'] == 'twitch' and sub_data['name'].lower() == identifier.lower():
+                target_id = sub_id
+                break
     elif platform == 'youtube':
-        # For YouTube, use the channel ID directly
+        # For YouTube, the identifier IS the target_id
         if identifier in guild_subscriptions:
             target_id = identifier
-    
+
     if not target_id:
-        await interaction.followup.send(f"❌ No subscription found for `{identifier}` on {platform}.")
+        await interaction.followup.send(f"❌ No subscription found for `{identifier}` on {platform} in this server.")
         return
     
-    subscription = db.get_subscription(target_id)
-    if subscription:
-        # Delete from external service
-        if platform == 'twitch' and subscription.get('subscription_id'):
-            delete_twitch_subscription(subscription['subscription_id'])
-        # YouTube subscriptions expire automatically, no need to delete
+    # Get the full subscription data to use its name in the success message
+    subscription_data = db.get_subscription(target_id)
+    if subscription_data:
+        streamer_name = subscription_data['name']
+        # For Twitch, we also need to delete the webhook subscription from their server
+        if platform == 'twitch' and subscription_data.get('subscription_id'):
+            delete_twitch_subscription(subscription_data['subscription_id'])
         
-        # Remove from database
+        # Finally, remove from our database
         db.remove_subscription(target_id)
-        await interaction.followup.send(f"✅ Unsubscribed from **{subscription['name']}** on {platform.title()}!")
+        await interaction.followup.send(f"✅ Unsubscribed from **{streamer_name}** on {platform.title()}!")
     else:
-        await interaction.followup.send(f"❌ Subscription not found.")
-
+        # This case is unlikely if target_id was found, but it's good practice to have it
+        await interaction.followup.send(f"❌ Could not find subscription data for `{identifier}`.")
 @tree.command(name="list", description="Show all active stream subscriptions in this server")
 async def list_command(interaction: discord.Interaction):
     """Handle /list command to show all subscriptions for this guild."""
