@@ -621,7 +621,7 @@ def youtube_webhook():
             print(f"Error processing YouTube webhook: {e}")
             return 'OK', 200
     
-    return 'OK', 200```
+    return 'OK', 200
             
             # --- THE FAULTY 'IF' BLOCK HAS BEEN REMOVED FROM HERE ---
 
@@ -651,7 +651,6 @@ def youtube_webhook():
             return 'OK', 200
     
     return 'OK', 200
-```
 
 # --- RUNNING THE BOT AND SERVER ---
 
