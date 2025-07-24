@@ -468,19 +468,22 @@ def twitch_webhook():
 
     return 'OK', 200
 
+# In main.py, replace the entire youtube_webhook function with this one:
+
 @app.route('/webhooks/youtube', methods=['GET', 'POST'])
 def youtube_webhook():
-    """Handle YouTube webhook notifications."""
-    if request.method == 'GET':
+    """Handle YouTube webhook notifications for both Live Streams and Video Uploads."""
+    if request.method == 'GET':  # Handle verification
         challenge = request.args.get('hub.challenge')
         if challenge:
             return Response(challenge, mimetype='text/plain')
         return 'OK', 200
 
-    elif request.method == 'POST':
+    elif request.method == 'POST':  # Handle notification
         try:
             xml_data = xmltodict.parse(request.data)
             entry = xml_data.get('feed', {}).get('entry', {})
+            
             video_id = entry.get('yt:videoId')
             channel_id = entry.get('yt:channelId')
             
@@ -490,24 +493,49 @@ def youtube_webhook():
             print(f"Error parsing potential YouTube webhook, ignoring: {e}")
             return 'OK', 200
         
+        # If parsing was successful, proceed to check the subscription and send the right notification.
         subscription = db.get_subscription(channel_id)
         if subscription and subscription['platform'] == 'youtube':
             discord_channel = bot.get_channel(subscription['channel_id'])
             if discord_channel and hasattr(discord_channel, 'send'):
+                
+                # --- START OF THE NEW LOGIC ---
+                
+                # These variables are needed for both types of announcements
                 channel_name = subscription['name']
                 video_title = entry.get('title', 'New Video')
                 custom_msg = subscription.get('custom_message', "")
                 stream_url = f"https://www.youtube.com/watch?v={video_id}"
+
+                # Check if the notification is for a live stream or a regular video upload.
+                live_status = entry.get('yt:liveBroadcastContent', 'none').lower()
+
+                if live_status == 'live':
+                    # It's a live stream! Create the "LIVE" embed.
+                    embed = discord.Embed(
+                        title=f"🔴 {channel_name} is now LIVE on YouTube!",
+                        description=f"{video_title}\n\n[Click here to watch!]({stream_url})",
+                        url=stream_url, 
+                        color=discord.Color.red() # Bright red for live
+                    )
+                    embed.set_footer(text="Click the title to watch the stream!")
+                else:
+                    # It's a regular video upload. Create the "New Video" embed.
+                    embed = discord.Embed(
+                        title=f"🎬 New Video from {channel_name}!",
+                        description=f"{video_title}\n\n[Click here to watch!]({stream_url})",
+                        url=stream_url,
+                        color=discord.Color.blue() # A different color to distinguish it
+                    )
+                    embed.set_footer(text="Click the title to watch the video!")
                 
-                embed = discord.Embed(
-                    title=f"{channel_name} is now LIVE on YouTube!",
-                    description=f"{video_title}\n\n[Click here to watch!]({stream_url})",
-                    url=stream_url, color=discord.Color.red()
-                )
                 embed.set_thumbnail(url=f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg")
-                embed.set_footer(text="Click the title to watch the stream!")
+                
+                # Send the prepared embed. This one line sends either the live or video notification.
                 bot.loop.create_task(discord_channel.send(content=custom_msg, embed=embed))
-        
+                
+                # --- END OF THE NEW LOGIC ---
+
         return 'OK', 200
     
     return 'OK', 200
